@@ -1,0 +1,36 @@
+name: Inspect release
+description: Verify the release marker against version files and expose release metadata.
+inputs:
+  working-directory:
+    description: Path to the consumer repository checkout.
+    default: '.'
+  config:
+    description: Configuration path relative to the checkout.
+    default: .releasekit.json
+outputs:
+  version:
+    description: Version recorded in the marker.
+    value: ${{ steps.release.outputs.version }}
+  tag:
+    description: Release tag.
+    value: ${{ steps.release.outputs.tag }}
+  source-sha:
+    description: Exact checked-out source commit.
+    value: ${{ steps.release.outputs.source-sha }}
+  body-path:
+    description: File containing release notes.
+    value: ${{ steps.release.outputs.body-path }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+      with:
+        python-version: '3.12'
+    - name: Inspect release
+      id: release
+      shell: bash
+      env:
+        RELEASEKIT_HOME: ${{ github.action_path }}/../..
+        RELEASEKIT_ROOT: ${{ inputs.working-directory }}
+        RELEASEKIT_CONFIG: ${{ inputs.config }}
+      run: python3 "$RELEASEKIT_HOME/releasekit-cli.py" --root "$RELEASEKIT_ROOT" --config "$RELEASEKIT_CONFIG" inspect

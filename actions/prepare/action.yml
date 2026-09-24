@@ -1,0 +1,62 @@
+name: Prepare release PR
+description: Update versions and curated release notes, then create or refresh a release PR.
+inputs:
+  token:
+    description: GitHub token with contents and pull-requests write permission.
+    default: ${{ github.token }}
+  working-directory:
+    description: Path to the consumer repository checkout.
+    default: '.'
+  config:
+    description: Configuration path relative to the checkout.
+    default: .releasekit.json
+  base:
+    description: Branch the release PR targets.
+    default: ${{ github.event.repository.default_branch }}
+  version:
+    description: Exact version override; otherwise use commit history and the current version.
+    default: ''
+outputs:
+  changed:
+    description: Whether there were unreleased notes to prepare.
+    value: ${{ steps.prepare.outputs.changed }}
+  version:
+    description: Prepared version.
+    value: ${{ steps.prepare.outputs.version }}
+  tag:
+    description: Prepared tag.
+    value: ${{ steps.prepare.outputs.tag }}
+  pull-request-number:
+    description: Release PR number, if one was created or updated.
+    value: ${{ steps.pr.outputs.pull-request-number }}
+  pull-request-url:
+    description: Release PR URL.
+    value: ${{ steps.pr.outputs.pull-request-url }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+      with:
+        python-version: '3.12'
+    - name: Prepare release files
+      id: prepare
+      shell: bash
+      env:
+        RELEASEKIT_HOME: ${{ github.action_path }}/../..
+        RELEASEKIT_ROOT: ${{ inputs.working-directory }}
+        RELEASEKIT_CONFIG: ${{ inputs.config }}
+        RELEASEKIT_VERSION: ${{ inputs.version }}
+      run: python3 "$RELEASEKIT_HOME/releasekit-cli.py" --root "$RELEASEKIT_ROOT" --config "$RELEASEKIT_CONFIG" prepare --version "$RELEASEKIT_VERSION"
+    - name: Create or update release PR
+      id: pr
+      uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1
+      with:
+        token: ${{ inputs.token }}
+        path: ${{ inputs.working-directory }}
+        base: ${{ inputs.base }}
+        branch: ${{ steps.prepare.outputs.branch }}
+        delete-branch: true
+        commit-message: 'chore(release): ${{ steps.prepare.outputs.tag || ''next release'' }}'
+        title: 'chore(release): ${{ steps.prepare.outputs.tag || ''next release'' }}'
+        body-path: ${{ steps.prepare.outputs.body-path }}
+        add-paths: ${{ steps.prepare.outputs.paths }}

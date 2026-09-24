@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.11', '3.14']
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m unittest discover -v
+
+  actions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+      - name: Create a consumer release
+        env:
+          CONSUMER: ${{ runner.temp }}/releasekit-consumer
+        run: |
+          mkdir -p "$CONSUMER"
+          printf '0.1.0\n' > "$CONSUMER/VERSION"
+          printf '# Changelog\n\n## [Unreleased]\n\n### Added\n\n- Initial release.\n' > "$CONSUMER/CHANGELOG.md"
+          python3 releasekit-cli.py --root "$CONSUMER" init --preset custom \
+            --build-command 'mkdir -p dist && python3 -m zipfile -c dist/app.zip VERSION' \
+            --files 'dist/*.zip'
+          git -C "$CONSUMER" init --initial-branch=main
+          git -C "$CONSUMER" config user.name 'ReleaseKit Test'
+          git -C "$CONSUMER" config user.email 'releasekit@example.test'
+          git -C "$CONSUMER" config commit.gpgsign false
+          git -C "$CONSUMER" add .
+          git -C "$CONSUMER" commit -m 'feat: initial example'
+          python3 releasekit-cli.py --root "$CONSUMER" prepare
+          git -C "$CONSUMER" add .
+          git -C "$CONSUMER" commit -m 'chore(release): v0.1.0'
+      - uses: ./actions/inspect
+        with:
+          working-directory: ${{ runner.temp }}/releasekit-consumer
+      - name: Build the consumer
+        working-directory: ${{ runner.temp }}/releasekit-consumer
+        run: |
+          mkdir -p dist
+          python3 -m zipfile -c dist/app.zip VERSION
+      - uses: ./actions/publish
+        id: staged
+        with:
+          working-directory: ${{ runner.temp }}/releasekit-consumer
+          files: dist/*.zip
+          dry-run: 'true'
+      - name: Verify the staged files
+        env:
+          ARTIFACTS: ${{ steps.staged.outputs.artifact-path }}
+        run: |
+          cd "$ARTIFACTS"
+          sha256sum --check SHA256SUMS
+      - name: Validate workflow syntax
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONSUMER: ${{ runner.temp }}/releasekit-consumer
+        run: |
+          gh release download v1.7.7 --repo rhysd/actionlint \
+            --pattern actionlint_1.7.7_linux_amd64.tar.gz --dir "$RUNNER_TEMP"
+          tar -xzf "$RUNNER_TEMP/actionlint_1.7.7_linux_amd64.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -shellcheck= .github/workflows/*.yml "$CONSUMER"/.github/workflows/*.yml

@@ -1,0 +1,60 @@
+name: Publish to Google Play
+description: Upload a prebuilt AAB and optional metadata through Fastlane.
+inputs:
+  aab:
+    description: File pattern selecting exactly one prebuilt AAB.
+    required: true
+  package-name:
+    description: Google Play application ID.
+    required: true
+  service-account-json:
+    description: Google service account JSON, passed from a repository secret.
+    required: true
+  track:
+    description: Google Play track.
+    default: internal
+  release-status:
+    description: completed, draft, halted, or inProgress.
+    default: completed
+  rollout:
+    description: Optional rollout fraction; use release-status inProgress for a partial rollout.
+    default: ''
+  metadata-path:
+    description: Optional Fastlane Android metadata directory.
+    default: ''
+  validate-only:
+    description: Validate the Play upload without committing it.
+    default: 'false'
+  fastlane-version:
+    description: Fastlane version to install.
+    default: '2.228.0'
+runs:
+  using: composite
+  steps:
+    - uses: ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9
+      with:
+        ruby-version: '3.3'
+    - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+      with:
+        python-version: '3.12'
+    - name: Install Fastlane
+      shell: bash
+      env:
+        RELEASEKIT_FASTLANE_VERSION: ${{ inputs.fastlane-version }}
+      run: gem install fastlane --version "$RELEASEKIT_FASTLANE_VERSION" --no-document
+    - name: Publish AAB
+      shell: bash
+      env:
+        RELEASEKIT_HOME: ${{ github.action_path }}/../..
+        RELEASEKIT_AAB: ${{ inputs.aab }}
+        RELEASEKIT_PLAY_PACKAGE: ${{ inputs.package-name }}
+        RELEASEKIT_PLAY_JSON: ${{ inputs.service-account-json }}
+        RELEASEKIT_PLAY_TRACK: ${{ inputs.track }}
+        RELEASEKIT_PLAY_STATUS: ${{ inputs.release-status }}
+        RELEASEKIT_PLAY_ROLLOUT: ${{ inputs.rollout }}
+        RELEASEKIT_PLAY_METADATA: ${{ inputs.metadata-path }}
+        RELEASEKIT_PLAY_VALIDATE: ${{ inputs.validate-only }}
+        FASTLANE_SKIP_UPDATE_CHECK: '1'
+        FASTLANE_HIDE_CHANGELOG: '1'
+        FASTLANE_OPT_OUT_USAGE: '1'
+      run: python3 "$RELEASEKIT_HOME/releasekit-cli.py" play

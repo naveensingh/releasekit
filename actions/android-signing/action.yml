@@ -1,0 +1,35 @@
+name: Configure Android signing
+description: Decode a signing key and export the SIGNING_* variables used by Gradle.
+inputs:
+  keystore-base64:
+    description: Base64-encoded signing keystore.
+    required: true
+  key-alias:
+    description: Signing key alias.
+    required: true
+  key-password:
+    description: Signing key password.
+    required: true
+  store-password:
+    description: Keystore password.
+    required: true
+outputs:
+  keystore:
+    description: Temporary keystore path, for cleanup after the build.
+    value: ${{ steps.signing.outputs.keystore }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+      with:
+        python-version: '3.12'
+    - name: Decode signing key
+      id: signing
+      shell: bash
+      env:
+        RELEASEKIT_HOME: ${{ github.action_path }}/../..
+        RELEASEKIT_KEYSTORE_BASE64: ${{ inputs.keystore-base64 }}
+        RELEASEKIT_KEY_ALIAS: ${{ inputs.key-alias }}
+        RELEASEKIT_KEY_PASSWORD: ${{ inputs.key-password }}
+        RELEASEKIT_STORE_PASSWORD: ${{ inputs.store-password }}
+      run: python3 "$RELEASEKIT_HOME/releasekit-cli.py" android-signing

@@ -1,0 +1,63 @@
+name: Publish GitHub release
+description: Stage checksummed artifacts, resume draft uploads, and publish from the exact release commit.
+inputs:
+  token:
+    description: Token with contents write permission on the destination repository.
+    default: ${{ github.token }}
+  working-directory:
+    description: Path to the consumer repository checkout.
+    default: '.'
+  config:
+    description: Configuration path relative to the checkout.
+    default: .releasekit.json
+  files:
+    description: Newline-separated file patterns relative to the checkout. Every pattern must match.
+    required: true
+  repository:
+    description: Destination OWNER/REPO; defaults to the source repository.
+    default: ''
+  draft:
+    description: Keep the completed GitHub release as a draft.
+    default: 'false'
+  prerelease:
+    description: Mark as a prerelease; semantic prerelease versions are detected automatically.
+    default: 'false'
+  dry-run:
+    description: Stage files and checksums without calling GitHub.
+    default: 'false'
+outputs:
+  url:
+    description: GitHub release URL; empty for a dry run.
+    value: ${{ steps.publish.outputs.url }}
+  published:
+    description: Whether the GitHub release is published.
+    value: ${{ steps.publish.outputs.published }}
+  artifact-path:
+    description: Directory containing the release files and checksums.
+    value: ${{ steps.publish.outputs.artifact-path }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+      with:
+        python-version: '3.12'
+    - name: Publish release
+      id: publish
+      shell: bash
+      env:
+        RELEASEKIT_HOME: ${{ github.action_path }}/../..
+        RELEASEKIT_ROOT: ${{ inputs.working-directory }}
+        RELEASEKIT_CONFIG: ${{ inputs.config }}
+        RELEASEKIT_FILES: ${{ inputs.files }}
+        RELEASEKIT_DESTINATION: ${{ inputs.repository }}
+        RELEASEKIT_DRAFT: ${{ inputs.draft }}
+        RELEASEKIT_PRERELEASE: ${{ inputs.prerelease }}
+        RELEASEKIT_DRY_RUN: ${{ inputs.dry-run }}
+        GITHUB_TOKEN: ${{ inputs.token }}
+      run: |
+        args=()
+        if [[ "$RELEASEKIT_DRAFT" == true ]]; then args+=(--draft); fi
+        if [[ "$RELEASEKIT_PRERELEASE" == true ]]; then args+=(--prerelease); fi
+        if [[ "$RELEASEKIT_DRY_RUN" == true ]]; then args+=(--dry-run); fi
+        python3 "$RELEASEKIT_HOME/releasekit-cli.py" --root "$RELEASEKIT_ROOT" --config "$RELEASEKIT_CONFIG" publish \
+          --files "$RELEASEKIT_FILES" --destination "$RELEASEKIT_DESTINATION" "${args[@]}"
